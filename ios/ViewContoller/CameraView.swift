@@ -267,6 +267,23 @@ class CameraView: UIView {
         cameraFeedService.switchCamera()
     }
 
+    @objc func capturePhoto(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        guard let jpegData = cameraFeedService.captureCurrentFrame() else {
+            reject("CAPTURE_FAILED", "No camera frame available", nil)
+            return
+        }
+
+        let filename = "mediapipe_capture_\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+
+        do {
+            try jpegData.write(to: fileURL)
+            resolve(["uri": fileURL.absoluteString, "path": fileURL.path])
+        } catch {
+            reject("SAVE_FAILED", error.localizedDescription, error)
+        }
+    }
+
     override func willMove(toSuperview newSuperview: UIView?) {
         if newSuperview == nil {
             UIApplication.shared.isIdleTimerDisabled = false

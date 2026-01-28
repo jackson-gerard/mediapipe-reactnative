@@ -44,7 +44,7 @@ type MediapipeComponentProps = TsMediapipeProps & {
   style?: ViewStyle;
 };
 
-const { MediaPipeNativeModule, TsMediapipeViewManager } = NativeModules;
+const { MediaPipeNativeModule, TsMediapipeViewManager, MediaPipeModule } = NativeModules;
 
 const isAndroid = Platform.OS === 'android';
 
@@ -147,5 +147,18 @@ const TsMediapipeView: React.FC<MediapipeComponentProps> = (props) => {
     </View>
   );
 };
+
+export interface CaptureResult {
+  uri: string;
+  path: string;
+}
+
+export async function capturePhoto(): Promise<CaptureResult> {
+  if (Platform.OS === 'ios') {
+    return MediaPipeModule.capturePhoto();
+  }
+
+  throw new Error('capturePhoto not yet implemented for Android');
+}
 
 export { TsMediapipeView as RNMediapipe, switchCamera };

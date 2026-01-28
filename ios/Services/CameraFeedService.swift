@@ -104,7 +104,8 @@ class CameraFeedService: NSObject {
     private let session: AVCaptureSession = AVCaptureSession()
     private lazy var videoPreviewLayer = AVCaptureVideoPreviewLayer(session: session)
     private let sessionQueue = DispatchQueue(label: "com.google.mediapipe.CameraFeedService.sessionQueue")
-    private var cameraPosition: AVCaptureDevice.Position = .front
+    private(set) var cameraPosition: AVCaptureDevice.Position = .front
+    private var latestSampleBuffer: CMSampleBuffer?
     
     private var cameraConfigurationStatus: CameraConfigurationStatus = .failed
     private lazy var videoDataOutput = AVCaptureVideoDataOutput()
@@ -606,9 +607,9 @@ extension CameraFeedService: AVCaptureVideoDataOutputSampleBufferDelegate {
      */
     
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        
-        
-        
+
+        self.latestSampleBuffer = sampleBuffer
+
         guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         // Assuming you have these properties defined elsewhere
         guard let imageSize = imageBufferSize else {
@@ -894,6 +895,27 @@ extension CameraFeedService: AVCaptureVideoDataOutputSampleBufferDelegate {
         let ciImage = CIImage(cgImage: cgImage, options: nil).transformed(by: CGAffineTransform(scaleX: 1.0 / scale, y: 1.0 / scale))
         
         return ciImage
+    }
+
+    // MARK: - Photo Capture
+
+    func captureCurrentFrame() -> Data? {
+        guard let sampleBuffer = latestSampleBuffer,
+              let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return nil
+        }
+
+        let ciImage = CIImage(cvPixelBuffer: imageBuffer)
+        let context = CIContext()
+
+        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else {
+            return nil
+        }
+
+        let orientation: UIImage.Orientation = (cameraPosition == .front) ? .leftMirrored : .up
+        let uiImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: orientation)
+
+        return uiImage.jpegData(compressionQuality: 0.85)
     }
 
 }

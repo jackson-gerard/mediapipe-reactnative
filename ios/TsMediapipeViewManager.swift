@@ -9,6 +9,7 @@ class TsMediapipeViewManager: RCTViewManager {
     override func view() -> (UIView) {
         let view = CameraView()
         cameraView = view
+        CameraViewRegistry.shared.activeCameraView = view
         return view
     }
     
@@ -19,6 +20,6 @@ class TsMediapipeViewManager: RCTViewManager {
     @objc func switchCamera() {
         cameraView?.switchCamera()
     }
-    
-    
+
+
 }
