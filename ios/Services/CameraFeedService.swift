@@ -912,7 +912,7 @@ extension CameraFeedService: AVCaptureVideoDataOutputSampleBufferDelegate {
             return nil
         }
 
-        let orientation: UIImage.Orientation = (cameraPosition == .front) ? .rightMirrored : .right
+        let orientation: UIImage.Orientation = (cameraPosition == .front) ? .upMirrored : .up
         let uiImage = UIImage(cgImage: cgImage, scale: 1.0, orientation: orientation)
 
       return uiImage.jpegData(compressionQuality: 1.0)
