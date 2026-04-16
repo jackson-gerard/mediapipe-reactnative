@@ -6,18 +6,29 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
-import androidx.core.content.ContextCompat
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import kotlin.math.max
 import kotlin.math.min
 
-class OverlayView(context: Context?, attrs: AttributeSet?) :
-  View(context, attrs) {
+/**
+ * OverlayView draws the MediaPipe skeleton lines on top of the camera preview.
+ *
+ * Styling is matched to the iOS OverlayView (CameraView.swift / OverlayView.swift):
+ *   - Line color: white  (iOS: UIColor(red:255 green:255 blue:255 alpha:1))
+ *   - Stroke width: 10f  (iOS: lineWidth CGFloat = 4 points — Android dp is denser,
+ *                         10f px at typical density produces a visually equivalent line)
+ *   - Joint dots: removed (iOS OverlayView does not draw filled point circles
+ *                          for body-scan mode; the commented-out block in the
+ *                          original Android code is intentionally left out)
+ *
+ * Body-part gating (face, torso, leftArm, etc.) reads from GlobalState, which is
+ * set by TsMediapipeViewManager ReactProps — identical to before.
+ */
+class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
   private var results: PoseLandmarkerResult? = null
-  private var pointPaint = Paint()
   private var linePaint = Paint()
 
   private var scaleFactor: Float = 1f
@@ -30,155 +41,118 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
 
   fun clear() {
     results = null
-    pointPaint.reset()
     linePaint.reset()
     invalidate()
     initPaints()
   }
 
   private fun initPaints() {
-    linePaint.color =
-      ContextCompat.getColor(context!!, R.color.icActive)
+    // ── Match iOS DefaultConstants / OverlayView styling ──────────────────────
+    // iOS lineColor = UIColor(red: 255, green: 255, blue: 255, alpha: 1) → white
+    linePaint.color = Color.WHITE
     linePaint.strokeWidth = LANDMARK_STROKE_WIDTH
     linePaint.style = Paint.Style.STROKE
-
-    pointPaint.color = Color.YELLOW
-    pointPaint.strokeWidth = LANDMARK_STROKE_WIDTH
-    pointPaint.style = Paint.Style.FILL
+    linePaint.strokeCap = Paint.Cap.ROUND   // smoother line ends, matches iOS CoreGraphics default
+    linePaint.strokeJoin = Paint.Join.ROUND
+    linePaint.isAntiAlias = true
   }
 
   override fun draw(canvas: Canvas) {
     super.draw(canvas)
 
-    val face = GlobalState.isFaceEnabled
-    val torso = GlobalState.isTorsoEnabled
-    val leftArm = GlobalState.isLeftArmEnabled
-    val rightArm = GlobalState.isRightArmEnabled
-    val leftLeg = GlobalState.isLeftLegEnabled
-    val rightLeg = GlobalState.isRightLegEnabled
-    val leftWrist = GlobalState.isLeftWristEnabled
+    val face      = GlobalState.isFaceEnabled
+    val torso     = GlobalState.isTorsoEnabled
+    val leftArm   = GlobalState.isLeftArmEnabled
+    val rightArm  = GlobalState.isRightArmEnabled
+    val leftLeg   = GlobalState.isLeftLegEnabled
+    val rightLeg  = GlobalState.isRightLegEnabled
+    val leftWrist  = GlobalState.isLeftWristEnabled
     val rightWrist = GlobalState.isRightWristEnabled
-    val leftAnkle = GlobalState.isLeftAnkleEnabled
+    val leftAnkle  = GlobalState.isLeftAnkleEnabled
     val rightAnkle = GlobalState.isRightAnkleEnabled
 
     results?.let { poseLandmarkerResult ->
       for (landmark in poseLandmarkerResult.landmarks()) {
-//        for((count, normalizedLandmark) in landmark.withIndex()) {
-//          if(count in 11..14 || count in 23..26){
-//            canvas.drawPoint(
-//              normalizedLandmark.x() * imageWidth * scaleFactor,
-//              normalizedLandmark.y() * imageHeight * scaleFactor,
-//              pointPaint
-//            )
-//          }
-//          else{
-//            continue;
-//          }
-//        }
 
-        for ((count, it) in PoseLandmarker.POSE_LANDMARKS.withIndex()) {
-          if (face && it.start() in 0..10) {
+        for (it in PoseLandmarker.POSE_LANDMARKS) {
+          val startIdx = it!!.start()
+          val endIdx   = it.end()
+
+          // Helper: draw a single connection line
+          fun drawConnection() {
             canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
+              poseLandmarkerResult.landmarks()[0][startIdx].x() * imageWidth  * scaleFactor,
+              poseLandmarkerResult.landmarks()[0][startIdx].y() * imageHeight * scaleFactor,
+              poseLandmarkerResult.landmarks()[0][endIdx].x()   * imageWidth  * scaleFactor,
+              poseLandmarkerResult.landmarks()[0][endIdx].y()   * imageHeight * scaleFactor,
               linePaint
             )
           }
 
-          if (torso && ((it.start() == 11 && it.end() == 12) || (it.start() == 23 && it.end() == 24) || (it.start() == 11 && it.end() == 23) || (it.start() == 12 && it.end() == 24))) {
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Face (landmarks 0–10)
+          if (face && startIdx in 0..10) drawConnection()
 
-          if (leftArm && ((it.start() == 11 && it.end() == 13) || (it.start() == 13 && it.end() == 15))) {
-            print("left arm true cond")
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Torso: shoulders (11-12), hips (23-24), left side (11-23), right side (12-24)
+          if (torso && (
+              (startIdx == 11 && endIdx == 12) ||
+              (startIdx == 23 && endIdx == 24) ||
+              (startIdx == 11 && endIdx == 23) ||
+              (startIdx == 12 && endIdx == 24)
+            )) drawConnection()
 
-          if (rightArm && ((it.start() == 12 && it.end() == 14) || (it.start() == 14 && it.end() == 16))) {
-            print("right arm true cond")
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Left arm: shoulder→elbow (11-13), elbow→wrist (13-15)
+          if (leftArm && (
+              (startIdx == 11 && endIdx == 13) ||
+              (startIdx == 13 && endIdx == 15)
+            )) drawConnection()
 
-          if (leftLeg && ((it.start() == 23 && it.end() == 25) || (it.start() == 25 && it.end() == 27))) {
-            print("left leg true cond")
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Right arm: shoulder→elbow (12-14), elbow→wrist (14-16)
+          if (rightArm && (
+              (startIdx == 12 && endIdx == 14) ||
+              (startIdx == 14 && endIdx == 16)
+            )) drawConnection()
 
-          if (rightLeg && ((it.start() == 24 && it.end() == 26) || (it.start() == 26 && it.end() == 28))) {
-            print("right leg true cond")
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Left leg: hip→knee (23-25), knee→ankle (25-27)
+          if (leftLeg && (
+              (startIdx == 23 && endIdx == 25) ||
+              (startIdx == 25 && endIdx == 27)
+            )) drawConnection()
 
-          if (leftWrist && ((it.start() == 15 && it.end() == 21) || (it.start() == 15 && it.end() == 17) || (it.start() == 15 && it.end() == 19) || (it.start() == 17 && it.end() == 19))) {
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Right leg: hip→knee (24-26), knee→ankle (26-28)
+          if (rightLeg && (
+              (startIdx == 24 && endIdx == 26) ||
+              (startIdx == 26 && endIdx == 28)
+            )) drawConnection()
 
-          if (rightWrist && ((it.start() == 16 && it.end() == 22) || (it.start() == 16 && it.end() == 20) || (it.start() == 16 && it.end() == 18) || (it.start() == 18 && it.end() == 20))) {
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Left wrist / hand
+          if (leftWrist && (
+              (startIdx == 15 && endIdx == 21) ||
+              (startIdx == 15 && endIdx == 17) ||
+              (startIdx == 15 && endIdx == 19) ||
+              (startIdx == 17 && endIdx == 19)
+            )) drawConnection()
 
-          if (leftAnkle && ((it.start() == 27 && it.end() == 29) || (it.start() == 27 && it.end() == 31) || (it.start() == 29 && it.end() == 31))) {
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
-          if (rightAnkle && ((it.start() == 28 && it.end() == 30) || (it.start() == 28 && it.end() == 32) || (it.start() == 30 && it.end() == 32))) {
-            canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][it!!.start()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.start()].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].x() * imageWidth * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][it.end()].y() * imageHeight * scaleFactor,
-              linePaint
-            )
-          }
+          // Right wrist / hand
+          if (rightWrist && (
+              (startIdx == 16 && endIdx == 22) ||
+              (startIdx == 16 && endIdx == 20) ||
+              (startIdx == 16 && endIdx == 18) ||
+              (startIdx == 18 && endIdx == 20)
+            )) drawConnection()
+
+          // Left ankle / foot
+          if (leftAnkle && (
+              (startIdx == 27 && endIdx == 29) ||
+              (startIdx == 27 && endIdx == 31) ||
+              (startIdx == 29 && endIdx == 31)
+            )) drawConnection()
+
+          // Right ankle / foot
+          if (rightAnkle && (
+              (startIdx == 28 && endIdx == 30) ||
+              (startIdx == 28 && endIdx == 32) ||
+              (startIdx == 30 && endIdx == 32)
+            )) drawConnection()
         }
       }
     }
@@ -191,27 +165,21 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
     runningMode: RunningMode = RunningMode.LIVE_STREAM
   ) {
     results = poseLandmarkerResults
-
     this.imageHeight = imageHeight
-    this.imageWidth = imageWidth
+    this.imageWidth  = imageWidth
 
     scaleFactor = when (runningMode) {
       RunningMode.IMAGE,
-      RunningMode.VIDEO -> {
-        min(width * 1f / imageWidth, height * 1f / imageHeight)
-      }
-
-      RunningMode.LIVE_STREAM -> {
-        // PreviewView is in FILL_START mode. So we need to scale up the
-        // landmarks to match with the size that the captured images will be
-        // displayed.
+      RunningMode.VIDEO -> min(width * 1f / imageWidth, height * 1f / imageHeight)
+      RunningMode.LIVE_STREAM ->
+        // PreviewView is FILL_START — scale up to match the displayed image size
         max(width * 1f / imageWidth, height * 1f / imageHeight)
-      }
     }
     invalidate()
   }
 
   companion object {
+    // 10f matches the visual weight of iOS lineWidth=4pt at standard phone densities
     private const val LANDMARK_STROKE_WIDTH = 10F
   }
 }
