@@ -221,14 +221,23 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
    */
   private fun storeLatestFrame(imageProxy: ImageProxy) {
     try {
+      val buffer = imageProxy.planes[0].buffer
+      // Save buffer position BEFORE reading, so downstream consumers
+      // (PoseLandmarkerHelper.detectLiveStream) can read from the same
+      // state we received it in. copyPixelsFromBuffer advances the buffer
+      // position, and without restoring we crash the pose detector with
+      // "Buffer not large enough for pixels".
+      val originalPosition = buffer.position()
+
       val bitmapBuffer = Bitmap.createBitmap(
         imageProxy.width,
         imageProxy.height,
         Bitmap.Config.ARGB_8888
       )
-      // Copy pixels without closing the proxy — detectPose() will close it
-      imageProxy.planes[0].buffer.rewind()
-      bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer)
+      buffer.rewind()
+      bitmapBuffer.copyPixelsFromBuffer(buffer)
+      // Restore the buffer's position so detectPose can reuse it safely.
+      buffer.position(originalPosition)
 
       val matrix = Matrix().apply {
         postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
