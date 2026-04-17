@@ -190,9 +190,11 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
       .build()
       .also {
         it.setAnalyzer(backgroundExecutor) { image ->
-          // Store the latest frame for capturePhoto() before running pose detection.
-          // This is the Android equivalent of CameraFeedService.latestSampleBuffer on iOS.
           storeLatestFrame(image)
+          // Log occasionally — once per 30 frames — so logcat isn't flooded
+          if (System.currentTimeMillis() % 30 == 0L) {
+            Log.d(TAG, "analyzer: latestBitmap ${if (latestBitmap != null) "set" else "null"}")
+          }
           detectPose(image)
         }
       }
@@ -262,11 +264,39 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
    *   - JPEG quality 1.0 to match iOS compressionQuality: 1.0
    */
   fun capturePhoto(promise: Promise) {
+    Log.d(TAG, "─── CameraFragment.capturePhoto ENTRY ───")
     val bitmap = latestBitmap
+    Log.d(TAG, "capturePhoto: latestBitmap = $bitmap")
     if (bitmap == null) {
+      Log.e(TAG, "capturePhoto: NO_FRAME — latestBitmap is null. Has the analyzer run yet?")
       promise.reject("NO_FRAME", "No camera frame available yet")
       return
     }
+    Log.d(TAG, "capturePhoto: bitmap dimensions = ${bitmap.width}x${bitmap.height}")
+
+    backgroundExecutor.execute {
+      try {
+        val filename = "mediapipe_capture_${System.currentTimeMillis()}.jpg"
+        val file = File(requireContext().cacheDir, filename)
+        Log.d(TAG, "capturePhoto: writing to ${file.absolutePath}")
+        FileOutputStream(file).use { out ->
+          bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+        }
+        Log.d(TAG, "capturePhoto: wrote ${file.length()} bytes")
+        val uri = "file://${file.absolutePath}"
+        promise.resolve(
+          com.facebook.react.bridge.Arguments.createMap().apply {
+            putString("uri", uri)
+            putString("path", file.absolutePath)
+          }
+        )
+        Log.d(TAG, "capturePhoto: resolved promise with uri=$uri")
+      } catch (e: Exception) {
+        Log.e(TAG, "capturePhoto failed: ${e.message}", e)
+        promise.reject("SAVE_FAILED", e.message)
+      }
+    }
+  }
 
     backgroundExecutor.execute {
       try {

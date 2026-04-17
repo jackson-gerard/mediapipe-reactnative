@@ -59,25 +59,29 @@ public class MediaPipeNativeModule extends ReactContextBaseJavaModule {
    */
   @ReactMethod
   public void capturePhoto(Promise promise) {
-    Log.d(TAG, "capturePhoto called");
+    Log.d(TAG, "─── capturePhoto ENTRY ───");
 
     AppCompatActivity activity = (AppCompatActivity) getCurrentActivity();
     if (activity == null) {
+      Log.e(TAG, "capturePhoto: getCurrentActivity() returned null");
       promise.reject("NO_FRAGMENT", "Activity is null");
       return;
     }
+    Log.d(TAG, "capturePhoto: activity = " + activity.getClass().getSimpleName());
 
     com.tsmediapipe.fragment.CameraFragment fragment =
         CameraFragmentManager.INSTANCE.getCameraFragment();
 
+    Log.d(TAG, "capturePhoto: CameraFragmentManager.cameraFragment = " + fragment);
+
     if (fragment == null) {
-      Log.e(TAG, "capturePhoto: CameraFragment is not initialized");
+      Log.e(TAG, "capturePhoto: CameraFragment not set in CameraFragmentManager. "
+          + "Was CameraFragment.onCreate() called? Is the TsMediapipeView mounted?");
       promise.reject("NO_FRAGMENT", "CameraFragment not initialized");
       return;
     }
 
-    // capturePhoto runs its file I/O on the backgroundExecutor inside CameraFragment,
-    // so we can call it directly from any thread.
+    Log.d(TAG, "capturePhoto: delegating to fragment.capturePhoto()");
     fragment.capturePhoto(promise);
   }
 }
