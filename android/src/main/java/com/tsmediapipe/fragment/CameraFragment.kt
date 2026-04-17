@@ -190,11 +190,9 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
       .build()
       .also {
         it.setAnalyzer(backgroundExecutor) { image ->
+          // Store the latest frame for capturePhoto() before running pose detection.
+          // This is the Android equivalent of CameraFeedService.latestSampleBuffer on iOS.
           storeLatestFrame(image)
-          // Log occasionally — once per 30 frames — so logcat isn't flooded
-          if (System.currentTimeMillis() % 30 == 0L) {
-            Log.d(TAG, "analyzer: latestBitmap ${if (latestBitmap != null) "set" else "null"}")
-          }
           detectPose(image)
         }
       }
@@ -293,27 +291,6 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
         Log.d(TAG, "capturePhoto: resolved promise with uri=$uri")
       } catch (e: Exception) {
         Log.e(TAG, "capturePhoto failed: ${e.message}", e)
-        promise.reject("SAVE_FAILED", e.message)
-      }
-    }
-  }
-
-    backgroundExecutor.execute {
-      try {
-        val filename = "mediapipe_capture_${System.currentTimeMillis()}.jpg"
-        val file = File(requireContext().cacheDir, filename)
-        FileOutputStream(file).use { out ->
-          bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
-        }
-        val uri = "file://${file.absolutePath}"
-        promise.resolve(
-          com.facebook.react.bridge.Arguments.createMap().apply {
-            putString("uri", uri)
-            putString("path", file.absolutePath)
-          }
-        )
-      } catch (e: Exception) {
-        Log.e(TAG, "capturePhoto failed: ${e.message}")
         promise.reject("SAVE_FAILED", e.message)
       }
     }
