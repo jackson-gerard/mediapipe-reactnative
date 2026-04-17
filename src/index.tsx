@@ -158,7 +158,7 @@ export async function capturePhoto(): Promise<CaptureResult> {
     return MediaPipeModule.capturePhoto();
   }
 
-  throw new Error('capturePhoto not yet implemented for Android');
+  return MediaPipeNativeModule.capturePhoto();
 }
 
 export { TsMediapipeView as RNMediapipe, switchCamera };
