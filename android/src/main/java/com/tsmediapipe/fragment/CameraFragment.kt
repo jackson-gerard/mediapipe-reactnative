@@ -272,14 +272,27 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
    */
   fun capturePhoto(promise: Promise) {
     Log.d(TAG, "─── CameraFragment.capturePhoto ENTRY ───")
-    val bitmap = latestBitmap
-    Log.d(TAG, "capturePhoto: latestBitmap = $bitmap")
-    if (bitmap == null) {
-      Log.e(TAG, "capturePhoto: NO_FRAME — latestBitmap is null. Has the analyzer run yet?")
+    val source = latestBitmap
+    Log.d(TAG, "capturePhoto: latestBitmap = $source")
+    if (source == null || source.isRecycled) {
+      Log.e(TAG, "capturePhoto: NO_FRAME — latestBitmap is null or recycled. Has the analyzer run yet?")
       promise.reject("NO_FRAME", "No camera frame available yet")
       return
     }
-    Log.d(TAG, "capturePhoto: bitmap dimensions = ${bitmap.width}x${bitmap.height}")
+
+    // Make an immediate independent copy on the calling thread, BEFORE the
+    // analyzer has a chance to recycle `latestBitmap` on its next frame.
+    // Without this copy we race with storeLatestFrame()'s `latestBitmap?.recycle()`
+    // call and crash with "Can't compress a recycled bitmap" when the executor
+    // finally runs the compress() below.
+    val snapshot: Bitmap = try {
+      source.copy(source.config ?: Bitmap.Config.ARGB_8888, false)
+    } catch (e: Exception) {
+      Log.e(TAG, "capturePhoto: failed to snapshot bitmap: ${e.message}", e)
+      promise.reject("SNAPSHOT_FAILED", e.message)
+      return
+    }
+    Log.d(TAG, "capturePhoto: snapshot dimensions = ${snapshot.width}x${snapshot.height}")
 
     backgroundExecutor.execute {
       try {
@@ -287,7 +300,7 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
         val file = File(requireContext().cacheDir, filename)
         Log.d(TAG, "capturePhoto: writing to ${file.absolutePath}")
         FileOutputStream(file).use { out ->
-          bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+          snapshot.compress(Bitmap.CompressFormat.JPEG, 100, out)
         }
         Log.d(TAG, "capturePhoto: wrote ${file.length()} bytes")
         val uri = "file://${file.absolutePath}"
@@ -301,6 +314,9 @@ class CameraFragment : Fragment(), PoseLandmarkerHelper.LandmarkerListener {
       } catch (e: Exception) {
         Log.e(TAG, "capturePhoto failed: ${e.message}", e)
         promise.reject("SAVE_FAILED", e.message)
+      } finally {
+        // We own the snapshot — release it now that we're done.
+        if (!snapshot.isRecycled) snapshot.recycle()
       }
     }
   }
