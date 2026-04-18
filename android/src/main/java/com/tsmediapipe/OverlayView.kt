@@ -9,7 +9,6 @@ import android.view.View
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
-import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -32,6 +31,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
   private var linePaint = Paint()
 
   private var scaleFactor: Float = 1f
+  private var offsetX: Float = 0f
+  private var offsetY: Float = 0f
   private var imageWidth: Int = 1
   private var imageHeight: Int = 1
 
@@ -81,10 +82,10 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
           // Helper: draw a single connection line
           fun drawConnection() {
             canvas.drawLine(
-              poseLandmarkerResult.landmarks()[0][startIdx].x() * imageWidth  * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][startIdx].y() * imageHeight * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][endIdx].x()   * imageWidth  * scaleFactor,
-              poseLandmarkerResult.landmarks()[0][endIdx].y()   * imageHeight * scaleFactor,
+              poseLandmarkerResult.landmarks()[0][startIdx].x() * imageWidth  * scaleFactor + offsetX,
+              poseLandmarkerResult.landmarks()[0][startIdx].y() * imageHeight * scaleFactor + offsetY,
+              poseLandmarkerResult.landmarks()[0][endIdx].x()   * imageWidth  * scaleFactor + offsetX,
+              poseLandmarkerResult.landmarks()[0][endIdx].y()   * imageHeight * scaleFactor + offsetY,
               linePaint
             )
           }
@@ -172,9 +173,12 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
       RunningMode.IMAGE,
       RunningMode.VIDEO -> min(width * 1f / imageWidth, height * 1f / imageHeight)
       RunningMode.LIVE_STREAM ->
-        // PreviewView is FILL_START — scale up to match the displayed image size
-        max(width * 1f / imageWidth, height * 1f / imageHeight)
+        // PreviewView uses FIT_CENTER — scale down to fit the image inside the view
+        min(width * 1f / imageWidth, height * 1f / imageHeight)
     }
+    // Center the skeleton over the letterboxed preview (mirrors iOS xOffset/yOffset logic)
+    offsetX = (width  - imageWidth  * scaleFactor) / 2f
+    offsetY = (height - imageHeight * scaleFactor) / 2f
     invalidate()
   }
 
